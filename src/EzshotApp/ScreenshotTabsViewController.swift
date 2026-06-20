@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import EzshotCore
+import UniformTypeIdentifiers
 
 @MainActor
 final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
@@ -12,6 +13,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
     private var emptyWindow: NSWindow?
     private var emptyToolbarDelegate: ScreenshotEditorToolbarDelegate?
     private var retiredEmptyWindows: [NSWindow] = []
+    private var retiredDocumentWindows: [NSWindow] = []
     private var keyMonitor: Any?
 
     init(preferences: PreferencesStore) {
@@ -56,14 +58,26 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
     }
 
     private func addDroppedImageURLs(_ urls: [URL]) {
-        let images = urls.compactMap { materializedImage(from: $0) }
-        guard !images.isEmpty else {
+        let imports = urls.compactMap { url -> (image: NSImage, tabTitle: String, fileURL: URL?)? in
+            guard let image = materializedImage(from: url) else {
+                return nil
+            }
+
+            let fileURL = Self.supportsDirectSave(to: url) ? url : nil
+            return (image, url.deletingPathExtension().lastPathComponent, fileURL)
+        }
+        guard !imports.isEmpty else {
             NSSound.beep()
             return
         }
 
-        images.forEach { image in
-            addDocument(ScreenshotDocument(image: image))
+        imports.forEach { importedImage in
+            addDocument(ScreenshotDocument(
+                image: importedImage.image,
+                tabTitle: importedImage.tabTitle,
+                fileURL: importedImage.fileURL,
+                isDirty: false
+            ))
         }
     }
 
@@ -94,6 +108,14 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
     }
 
     @objc func saveCurrentDocument() {
+        performSaveCurrentDocument(forceSavePanel: false)
+    }
+
+    @objc func saveCurrentDocumentAs() {
+        performSaveCurrentDocument(forceSavePanel: true)
+    }
+
+    private func performSaveCurrentDocument(forceSavePanel: Bool) {
         guard
             let window = NSApp.keyWindow,
             let document = documentsByWindow[window]
@@ -103,7 +125,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         }
 
         do {
-            if document.fileURL == nil {
+            if forceSavePanel || document.fileURL == nil {
                 try showSavePanel(for: document, window: window)
             } else {
                 try document.overwrite()
@@ -155,11 +177,12 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard let document = documentsByWindow[sender], document.isDirty else {
-            return true
+        if documentsByWindow[sender] != nil || sender === emptyWindow {
+            hideEditorWindows()
+            return false
         }
 
-        return confirmCloseUnsavedDocuments([document])
+        return true
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -203,9 +226,19 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
             self.toolbarsByWindow[window]?.refreshUndo()
         }
 
-        let toolbarDelegate = ScreenshotEditorToolbarDelegate(editor: editorView, preferences: preferences) { [weak self] in
-            self?.refreshChrome()
-        }
+        let toolbarDelegate = ScreenshotEditorToolbarDelegate(
+            editor: editorView,
+            preferences: preferences,
+            onSettingsChange: { [weak self] in
+                self?.refreshChrome()
+            },
+            onSave: { [weak self] in
+                self?.saveCurrentDocument()
+            },
+            onSaveAs: { [weak self] in
+                self?.saveCurrentDocumentAs()
+            }
+        )
         let toolbar = NSToolbar(identifier: "EzshotEditorToolbar")
         toolbar.delegate = toolbarDelegate
         toolbar.displayMode = .iconOnly
@@ -223,6 +256,26 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         NSApp.mainMenu = makeMainMenu(saveItem: saveItem)
 
         return window
+    }
+
+    private func hideEditorWindows() {
+        let documents = orderedWindows.compactMap { documentsByWindow[$0] }
+        guard confirmCloseUnsavedDocuments(documents) else {
+            return
+        }
+
+        let windowsToHide = orderedWindows
+        windowsToHide.forEach { window in
+            window.orderOut(nil)
+        }
+        retiredDocumentWindows.append(contentsOf: windowsToHide)
+
+        documentsByWindow.removeAll()
+        editorsByWindow.removeAll()
+        toolbarsByWindow.removeAll()
+        orderedWindows.removeAll()
+
+        emptyWindow?.orderOut(nil)
     }
 
     private func showEmptyWindow() {
@@ -255,9 +308,19 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         window.contentView = contentView
         window.center()
 
-        let toolbarDelegate = ScreenshotEditorToolbarDelegate(editor: nil, preferences: preferences) { [weak self] in
-            self?.refreshChrome()
-        }
+        let toolbarDelegate = ScreenshotEditorToolbarDelegate(
+            editor: nil,
+            preferences: preferences,
+            onSettingsChange: { [weak self] in
+                self?.refreshChrome()
+            },
+            onSave: { [weak self] in
+                self?.saveCurrentDocument()
+            },
+            onSaveAs: { [weak self] in
+                self?.saveCurrentDocumentAs()
+            }
+        )
         let toolbar = NSToolbar(identifier: "EzshotEmptyToolbar")
         toolbar.delegate = toolbarDelegate
         toolbar.displayMode = .iconOnly
@@ -326,6 +389,10 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
 
         let fileMenu = NSMenu(title: localizer.text(.file))
         fileMenu.addItem(saveItem)
+        let saveAsItem = NSMenuItem(title: localizer.text(.saveAs), action: #selector(saveCurrentDocumentAs), keyEquivalent: "s")
+        saveAsItem.keyEquivalentModifierMask = [.command, .shift]
+        saveAsItem.target = self
+        fileMenu.addItem(saveAsItem)
         fileMenu.addItem(NSMenuItem(title: localizer.text(.copyEditedImage), action: #selector(copyCurrentImage), keyEquivalent: "c"))
         fileMenu.items.last?.target = self
         fileMenuItem.submenu = fileMenu
@@ -364,7 +431,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
 
     private func showSavePanel(for document: ScreenshotDocument, window: NSWindow) throws {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
+        panel.allowedContentTypes = [.png, .jpeg]
         panel.nameFieldStringValue = document.defaultFileName
         panel.canCreateDirectories = true
 
@@ -378,6 +445,15 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         document.isDirty ? "\(document.tabTitle) *" : document.tabTitle
     }
 
+    private static func supportsDirectSave(to url: URL) -> Bool {
+        switch url.pathExtension.lowercased() {
+        case "png", "jpg", "jpeg":
+            return true
+        default:
+            return false
+        }
+    }
+
     private func confirmCloseUnsavedDocuments(_ documents: [ScreenshotDocument]) -> Bool {
         let unsavedCount = documents.filter(\.isDirty).count
         guard unsavedCount > 0 else {
@@ -385,10 +461,16 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Close \(unsavedCount) Unsaved Screenshot\(unsavedCount == 1 ? "" : "s")?"
-        alert.informativeText = "Unsaved screenshots will be discarded."
-        alert.addButton(withTitle: "Discard")
-        alert.addButton(withTitle: "Cancel")
+        let localizer = AppLocalizer(preferences: preferences)
+        alert.icon = NSApp.applicationIconImage ?? AppIconFactory.makeApplicationIcon()
+        if unsavedCount == 1 {
+            alert.messageText = localizer.text(.closeUnsavedScreenshot)
+        } else {
+            alert.messageText = String(format: localizer.text(.closeUnsavedScreenshots), unsavedCount)
+        }
+        alert.informativeText = localizer.text(.unsavedScreenshotsDiscarded)
+        alert.addButton(withTitle: localizer.text(.discard))
+        alert.addButton(withTitle: localizer.text(.cancel))
 
         return alert.runModal() == .alertFirstButtonReturn
     }
@@ -488,6 +570,8 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
 @MainActor
 private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate {
     private enum Item {
+        static let save = NSToolbarItem.Identifier("EzshotSave")
+        static let saveAs = NSToolbarItem.Identifier("EzshotSaveAs")
         static let undo = NSToolbarItem.Identifier("EzshotUndo")
         static let copy = NSToolbarItem.Identifier("EzshotCopy")
         static let delay = NSToolbarItem.Identifier("EzshotDelay")
@@ -500,6 +584,8 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private weak var editor: ScreenshotEditorView?
     private let preferences: PreferencesStore
     private let onSettingsChange: () -> Void
+    private let onSave: () -> Void
+    private let onSaveAs: () -> Void
     private lazy var settingsMenuController = AppSettingsMenuController(preferences: preferences) { [weak self] in
         guard let self else {
             return
@@ -512,6 +598,8 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         self?.refreshDelay()
     }
     private var segmentedControl: NSSegmentedControl?
+    private var saveItem: NSToolbarItem?
+    private var saveAsItem: NSToolbarItem?
     private var undoItem: NSToolbarItem?
     private var delayItem: NSToolbarItem?
     private var styleItem: NSToolbarItem?
@@ -524,19 +612,27 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private weak var appearanceButton: NSButton?
     private var delayPopover: NSPopover?
 
-    init(editor: ScreenshotEditorView?, preferences: PreferencesStore, onSettingsChange: @escaping () -> Void) {
+    init(
+        editor: ScreenshotEditorView?,
+        preferences: PreferencesStore,
+        onSettingsChange: @escaping () -> Void,
+        onSave: @escaping () -> Void,
+        onSaveAs: @escaping () -> Void
+    ) {
         self.editor = editor
         self.preferences = preferences
         self.onSettingsChange = onSettingsChange
+        self.onSave = onSave
+        self.onSaveAs = onSaveAs
         super.init()
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
+        [Item.save, Item.saveAs, Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
+        [Item.save, Item.saveAs, Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
     }
 
     func toolbar(
@@ -544,6 +640,34 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        if itemIdentifier == Item.save {
+            let localizer = AppLocalizer(preferences: preferences)
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = localizer.text(.save)
+            item.paletteLabel = localizer.text(.save)
+            item.toolTip = tooltip(localizer.text(.save), shortcut: "Cmd+S")
+            item.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: localizer.text(.save))
+            item.target = self
+            item.action = #selector(save)
+            item.isEnabled = editor != nil
+            saveItem = item
+            return item
+        }
+
+        if itemIdentifier == Item.saveAs {
+            let localizer = AppLocalizer(preferences: preferences)
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = localizer.text(.saveAs)
+            item.paletteLabel = localizer.text(.saveAs)
+            item.toolTip = tooltip(localizer.text(.saveAs), shortcut: "Cmd+Shift+S")
+            item.image = NSImage(systemSymbolName: "square.and.arrow.down.on.square", accessibilityDescription: localizer.text(.saveAs))
+            item.target = self
+            item.action = #selector(saveAs)
+            item.isEnabled = editor != nil
+            saveAsItem = item
+            return item
+        }
+
         if itemIdentifier == Item.undo {
             let localizer = AppLocalizer(preferences: preferences)
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
@@ -703,6 +827,14 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         refreshUndo()
     }
 
+    @objc private func save() {
+        onSave()
+    }
+
+    @objc private func saveAs() {
+        onSaveAs()
+    }
+
     @objc private func copyImage() {
         editor?.copyImageToPasteboard()
     }
@@ -766,6 +898,12 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
 
     func refreshChrome() {
         let localizer = AppLocalizer(preferences: preferences)
+        saveItem?.label = localizer.text(.save)
+        saveItem?.paletteLabel = localizer.text(.save)
+        saveItem?.toolTip = tooltip(localizer.text(.save), shortcut: "Cmd+S")
+        saveAsItem?.label = localizer.text(.saveAs)
+        saveAsItem?.paletteLabel = localizer.text(.saveAs)
+        saveAsItem?.toolTip = tooltip(localizer.text(.saveAs), shortcut: "Cmd+Shift+S")
         undoItem?.label = localizer.text(.undo)
         undoItem?.paletteLabel = localizer.text(.undo)
         undoItem?.toolTip = tooltip(localizer.text(.undo), shortcut: "Cmd+Z")

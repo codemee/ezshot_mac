@@ -13,7 +13,9 @@ struct EzshotCoreTests {
         try testLanguageModeDefaultsToSystemAndPersists()
         try testAppearanceModeDefaultsToSystemAndPersists()
         try testDefaultFileNameUsesPNGTimestampFormat()
+        try testCustomTabTitleOverridesScreenshotTitle()
         try testSaveWritesPNGAndClearsDirtyState()
+        try testSaveWritesJPEGAndClearsDirtyState()
         try testUpdateImageMarksDocumentDirty()
         try testOverwriteRequiresExistingFileURL()
         try testOverwriteWritesToExistingURL()
@@ -118,8 +120,32 @@ struct EzshotCoreTests {
         try document.save(to: url)
 
         try expect(document.fileURL == url, "save should remember file URL")
+        try expect(document.tabTitle == url.deletingPathExtension().lastPathComponent, "save should update tab title from file name")
         try expect(document.isDirty == false, "save should clear dirty state")
         try expect(FileManager.default.fileExists(atPath: url.path), "save should write PNG file")
+    }
+
+    private static func testSaveWritesJPEGAndClearsDirtyState() throws {
+        let document = ScreenshotDocument(image: makeImage())
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("jpg")
+        defer {
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        try document.save(to: url)
+
+        let data = try Data(contentsOf: url)
+        try expect(document.fileURL == url, "JPEG save should remember file URL")
+        try expect(document.isDirty == false, "JPEG save should clear dirty state")
+        try expect(data.starts(with: [0xFF, 0xD8]), "save should write JPEG data")
+    }
+
+    private static func testCustomTabTitleOverridesScreenshotTitle() throws {
+        let document = ScreenshotDocument(image: makeImage(), tabTitle: "Original File")
+
+        try expect(document.tabTitle == "Original File", "custom tab title should be retained")
     }
 
     private static func testOverwriteRequiresExistingFileURL() throws {

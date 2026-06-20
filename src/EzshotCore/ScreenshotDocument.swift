@@ -4,12 +4,14 @@ import Foundation
 public enum ScreenshotDocumentError: Error, Equatable {
     case missingFileURL
     case pngEncodingFailed
+    case jpegEncodingFailed
 }
 
 public final class ScreenshotDocument: Identifiable {
     public let id: UUID
     public private(set) var image: NSImage
     public let createdAt: Date
+    public private(set) var tabTitle: String
     public private(set) var fileURL: URL?
     public private(set) var isDirty: Bool
 
@@ -17,18 +19,16 @@ public final class ScreenshotDocument: Identifiable {
         id: UUID = UUID(),
         image: NSImage,
         createdAt: Date = Date(),
+        tabTitle: String? = nil,
         fileURL: URL? = nil,
         isDirty: Bool = true
     ) {
         self.id = id
         self.image = image
         self.createdAt = createdAt
+        self.tabTitle = tabTitle ?? "Screenshot \(Self.tabTimeFormatter.string(from: createdAt))"
         self.fileURL = fileURL
         self.isDirty = isDirty
-    }
-
-    public var tabTitle: String {
-        "Screenshot \(Self.tabTimeFormatter.string(from: createdAt))"
     }
 
     public var defaultFileName: String {
@@ -36,12 +36,17 @@ public final class ScreenshotDocument: Identifiable {
     }
 
     public func save(to url: URL) throws {
-        guard let data = image.pngData() else {
+        guard let data = image.imageData(for: url) else {
+            if url.isJPEG {
+                throw ScreenshotDocumentError.jpegEncodingFailed
+            }
+
             throw ScreenshotDocumentError.pngEncodingFailed
         }
 
         try data.write(to: url, options: .atomic)
         fileURL = url
+        tabTitle = url.deletingPathExtension().lastPathComponent
         isDirty = false
     }
 
@@ -81,6 +86,14 @@ public extension ScreenshotDocument {
 }
 
 private extension NSImage {
+    func imageData(for url: URL) -> Data? {
+        if url.isJPEG {
+            return jpegData()
+        }
+
+        return pngData()
+    }
+
     func pngData() -> Data? {
         guard
             let tiffRepresentation,
@@ -90,5 +103,23 @@ private extension NSImage {
         }
 
         return bitmap.representation(using: .png, properties: [:])
+    }
+
+    func jpegData() -> Data? {
+        guard
+            let tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffRepresentation)
+        else {
+            return nil
+        }
+
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.92])
+    }
+}
+
+private extension URL {
+    var isJPEG: Bool {
+        let ext = pathExtension.lowercased()
+        return ext == "jpg" || ext == "jpeg"
     }
 }

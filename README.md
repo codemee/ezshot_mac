@@ -22,7 +22,8 @@ Ezshot is a small native macOS screenshot and image-markup utility. It runs in t
 - Region selection overlay with crosshair cursor, horizontal/vertical guide lines, and drag selection.
 - Optional delayed capture with visible countdown after the capture target is selected.
 - Tabbed screenshot editor. Each capture opens as a new tab/window and remains unsaved until `Cmd+S`.
-- Drag image files into an empty or existing editor window to import them as new editable tabs.
+- Closing the editor hides the editor UI and clears the open tabs, while the app remains available from the menu bar.
+- Drag image files into an empty or existing editor window to import them as new editable tabs. Imported tabs use the original file name as their title.
 - Editor tools:
   - Persistent crop handles with live crop preview.
   - Line, arrow, and mosaic tools.
@@ -36,6 +37,8 @@ Ezshot is a small native macOS screenshot and image-markup utility. It runs in t
 ## Saving
 
 `Cmd+S` saves only the current tab. The first save shows a macOS save panel with a default PNG filename. Later saves overwrite the same file path.
+
+`Cmd+Shift+S` always opens the save panel for Save As. Ezshot can write PNG, JPG, and JPEG files. After a successful save, the tab title updates to the saved file name and the document remembers that file path for later overwrites.
 
 ## Development
 

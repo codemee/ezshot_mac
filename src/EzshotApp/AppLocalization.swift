@@ -57,6 +57,7 @@ struct AppLocalizer {
         case dark
         case quit
         case save
+        case saveAs
         case file
         case window
         case copyEditedImage
@@ -73,6 +74,11 @@ struct AppLocalizer {
         case emptyMessage
         case seconds
         case off
+        case closeUnsavedScreenshot
+        case closeUnsavedScreenshots
+        case unsavedScreenshotsDiscarded
+        case discard
+        case cancel
     }
 
     private var en: [Key: String] {
@@ -92,6 +98,7 @@ struct AppLocalizer {
             .dark: "Dark",
             .quit: "Quit Ezshot",
             .save: "Save",
+            .saveAs: "Save As...",
             .file: "File",
             .window: "Window",
             .copyEditedImage: "Copy Edited Image",
@@ -107,7 +114,12 @@ struct AppLocalizer {
             .emptyTitle: "Ezshot",
             .emptyMessage: "No screenshots yet",
             .seconds: "seconds",
-            .off: "Off"
+            .off: "Off",
+            .closeUnsavedScreenshot: "Close Unsaved Screenshot?",
+            .closeUnsavedScreenshots: "Close %d Unsaved Screenshots?",
+            .unsavedScreenshotsDiscarded: "Unsaved screenshots will be discarded.",
+            .discard: "Discard",
+            .cancel: "Cancel"
         ]
     }
 
@@ -128,6 +140,7 @@ struct AppLocalizer {
             .dark: "深色",
             .quit: "結束 Ezshot",
             .save: "儲存",
+            .saveAs: "另存新檔...",
             .file: "檔案",
             .window: "視窗",
             .copyEditedImage: "複製編修後圖片",
@@ -143,7 +156,12 @@ struct AppLocalizer {
             .emptyTitle: "Ezshot",
             .emptyMessage: "尚未有截圖",
             .seconds: "秒",
-            .off: "關"
+            .off: "關",
+            .closeUnsavedScreenshot: "關閉未儲存的截圖？",
+            .closeUnsavedScreenshots: "關閉 %d 張未儲存的截圖？",
+            .unsavedScreenshotsDiscarded: "未儲存的截圖將會被放棄。",
+            .discard: "放棄",
+            .cancel: "取消"
         ]
     }
 }
