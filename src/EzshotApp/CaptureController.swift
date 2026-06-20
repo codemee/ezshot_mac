@@ -98,7 +98,7 @@ final class CaptureController {
         closeSelectionOverlays()
         closeWindowSelectionOverlays()
 
-        let windows = capturableWindows()
+        let windows = capturableWindows(includingCurrentProcess: true)
         windowSelectionOverlays = NSScreen.screens.map { screen in
             WindowSelectionOverlayWindow(screen: screen, windows: windows) { [weak self] window in
                 DispatchQueue.main.async {
@@ -263,7 +263,7 @@ final class CaptureController {
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
-    private func capturableWindows() -> [CapturableWindow] {
+    private func capturableWindows(includingCurrentProcess: Bool = false) -> [CapturableWindow] {
         guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
@@ -273,7 +273,7 @@ final class CaptureController {
             guard
                 let id = info[kCGWindowNumber as String] as? CGWindowID,
                 let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
-                ownerPID != currentPID,
+                includingCurrentProcess || ownerPID != currentPID,
                 let layer = info[kCGWindowLayer as String] as? Int,
                 layer == 0,
                 let alpha = info[kCGWindowAlpha as String] as? Double,

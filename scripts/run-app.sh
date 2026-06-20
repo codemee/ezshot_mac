@@ -46,8 +46,6 @@ if [ "$REBUILD" -eq 1 ] || [ ! -x "$APP_EXECUTABLE" ]; then
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Ezshot</string>
 </dict>

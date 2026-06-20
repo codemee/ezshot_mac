@@ -19,7 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusClickWorkItem: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.applicationIconImage = AppIconFactory.makeApplicationIcon()
         AppSettingsMenuController.applyAppearance(preferences: preferences)
         configureStatusItem()
         captureController.start()
@@ -31,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = makeStatusBarIcon()
+        statusItem.button?.image = AppIconFactory.makeStatusIcon()
         statusItem.button?.toolTip = "Ezshot"
         statusItem.button?.target = self
         statusItem.button?.action = #selector(handleStatusItemClick)
@@ -105,34 +106,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
 
         statusMenu = menu
-    }
-
-    private func makeStatusBarIcon() -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18))
-        image.lockFocus()
-        NSColor.labelColor.setStroke()
-        NSColor.labelColor.setFill()
-
-        let top = NSBezierPath(roundedRect: NSRect(x: 6.2, y: 12.2, width: 5.6, height: 2.3), xRadius: 0.9, yRadius: 0.9)
-        top.fill()
-
-        let body = NSBezierPath(roundedRect: NSRect(x: 2.6, y: 4.2, width: 12.8, height: 9.3), xRadius: 2.1, yRadius: 2.1)
-        body.lineWidth = 1.9
-        body.stroke()
-
-        let shutter = NSBezierPath(roundedRect: NSRect(x: 12.2, y: 11.2, width: 1.8, height: 1.1), xRadius: 0.5, yRadius: 0.5)
-        shutter.fill()
-
-        let lens = NSBezierPath(ovalIn: NSRect(x: 5.7, y: 5.8, width: 6.6, height: 6.6))
-        lens.lineWidth = 1.8
-        lens.stroke()
-
-        let innerLens = NSBezierPath(ovalIn: NSRect(x: 7.9, y: 8, width: 2.2, height: 2.2))
-        innerLens.fill()
-
-        image.unlockFocus()
-        image.isTemplate = true
-        return image
     }
 
     private func handleCapturedDocument(_ document: ScreenshotDocument) {

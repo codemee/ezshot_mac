@@ -11,6 +11,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
     private var orderedWindows: [NSWindow] = []
     private var emptyWindow: NSWindow?
     private var emptyToolbarDelegate: ScreenshotEditorToolbarDelegate?
+    private var retiredEmptyWindows: [NSWindow] = []
     private var keyMonitor: Any?
 
     init(preferences: PreferencesStore) {
@@ -46,17 +47,30 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
 
         selectDocumentWindow(window)
 
+        // Keep the empty drag source window alive after importing. Closing a
+        // window shortly after an AppKit drag session can crash while drag
+        // bookkeeping is still unwinding.
         if let windowToClose {
-            DispatchQueue.main.async {
-                windowToClose.close()
-            }
+            retiredEmptyWindows.append(windowToClose)
+        }
+    }
+
+    private func addDroppedImageURLs(_ urls: [URL]) {
+        let images = urls.compactMap { materializedImage(from: $0) }
+        guard !images.isEmpty else {
+            NSSound.beep()
+            return
+        }
+
+        images.forEach { image in
+            addDocument(ScreenshotDocument(image: image))
         }
     }
 
     func refreshChrome() {
         let localizer = AppLocalizer(preferences: preferences)
         emptyWindow?.title = localizer.text(.emptyTitle)
-        if let label = emptyWindow?.contentView?.subviews.compactMap({ $0 as? NSTextField }).first {
+        if let contentView = emptyWindow?.contentView, let label = firstTextField(in: contentView) {
             label.stringValue = localizer.text(.emptyMessage)
         }
         emptyToolbarDelegate?.refreshChrome()
@@ -175,7 +189,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         window.tabbingMode = .preferred
         window.tabbingIdentifier = "EzshotScreenshots"
         window.delegate = self
-        window.contentView = editorView
+        window.contentView = makeDropContainer(contentView: editorView)
         window.center()
         editorView.onDocumentChanged = { [weak window, weak self] in
         guard
@@ -219,7 +233,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         }
 
         let localizer = AppLocalizer(preferences: preferences)
-        let contentView = NSView()
+        let contentView = makeDropContainer(contentView: NSView())
         let label = NSTextField(labelWithString: localizer.text(.emptyMessage))
         label.font = .systemFont(ofSize: 18, weight: .medium)
         label.textColor = .secondaryLabelColor
@@ -255,6 +269,48 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func makeDropContainer(contentView: NSView) -> ImageDropView {
+        let container = ImageDropView { [weak self] urls in
+            self?.addDroppedImageURLs(urls)
+        }
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: container.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
+    }
+
+    private func firstTextField(in view: NSView) -> NSTextField? {
+        if let textField = view as? NSTextField {
+            return textField
+        }
+
+        for subview in view.subviews {
+            if let textField = firstTextField(in: subview) {
+                return textField
+            }
+        }
+
+        return nil
+    }
+
+    private func materializedImage(from url: URL) -> NSImage? {
+        guard
+            let sourceImage = NSImage(contentsOf: url),
+            let cgImage = sourceImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else {
+            return nil
+        }
+
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     private func makeMainMenu(saveItem: NSMenuItem) -> NSMenu {
@@ -493,7 +549,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = localizer.text(.undo)
             item.paletteLabel = localizer.text(.undo)
-            item.toolTip = localizer.text(.undo)
+            item.toolTip = tooltip(localizer.text(.undo), shortcut: "Cmd+Z")
             item.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: localizer.text(.undo))
             item.target = self
             item.action = #selector(undo)
@@ -507,7 +563,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = localizer.text(.copyEditedImage)
             item.paletteLabel = localizer.text(.copyEditedImage)
-            item.toolTip = localizer.text(.copyEditedImage)
+            item.toolTip = tooltip(localizer.text(.copyEditedImage), shortcut: "Cmd+C")
             item.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: localizer.text(.copyEditedImage))
             item.target = self
             item.action = #selector(copyImage)
@@ -531,7 +587,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = localizer.text(.style)
             item.paletteLabel = localizer.text(.lineStyle)
-            item.toolTip = localizer.text(.lineStyle)
+            item.toolTip = tooltip(localizer.text(.lineStyle), shortcut: "Cmd+Shift+L")
             item.view = makeStyleButton()
             item.isEnabled = editor != nil
             styleItem = item
@@ -586,7 +642,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         for (index, mode) in ScreenshotEditMode.allCases.enumerated() {
             let title = title(for: mode, localizer: localizer)
             control.setImage(NSImage(systemSymbolName: symbolName(for: mode), accessibilityDescription: title), forSegment: index)
-            control.setToolTip(title, forSegment: index)
+            control.setToolTip(tooltip(title, shortcut: shortcut(for: mode)), forSegment: index)
             control.setWidth(34, forSegment: index)
         }
 
@@ -712,12 +768,12 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         let localizer = AppLocalizer(preferences: preferences)
         undoItem?.label = localizer.text(.undo)
         undoItem?.paletteLabel = localizer.text(.undo)
-        undoItem?.toolTip = localizer.text(.undo)
+        undoItem?.toolTip = tooltip(localizer.text(.undo), shortcut: "Cmd+Z")
         delayItem?.label = localizer.text(.delay)
         delayItem?.paletteLabel = localizer.text(.delay)
         styleItem?.label = localizer.text(.style)
         styleItem?.paletteLabel = localizer.text(.lineStyle)
-        styleItem?.toolTip = localizer.text(.lineStyle)
+        styleItem?.toolTip = tooltip(localizer.text(.lineStyle), shortcut: "Cmd+Shift+L")
         toolsItem?.label = localizer.text(.tools)
         toolsItem?.paletteLabel = localizer.text(.tools)
         languageItem?.label = localizer.text(.language)
@@ -728,10 +784,14 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         appearanceItem?.toolTip = localizer.text(.appearance)
         languageButton?.toolTip = localizer.text(.language)
         appearanceButton?.toolTip = localizer.text(.appearance)
+        styleButton?.toolTip = tooltip(localizer.text(.lineStyle), shortcut: "Cmd+Shift+L")
 
         if let segmentedControl {
             for (index, mode) in ScreenshotEditMode.allCases.enumerated() {
-                segmentedControl.setToolTip(title(for: mode, localizer: localizer), forSegment: index)
+                segmentedControl.setToolTip(
+                    tooltip(title(for: mode, localizer: localizer), shortcut: shortcut(for: mode)),
+                    forSegment: index
+                )
             }
         }
         refreshDelay()
@@ -818,7 +878,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func makeStyleButton() -> NSButton {
         let button = NSButton(image: makeStylePreviewImage(), target: self, action: #selector(showStylePopover(_:)))
         button.bezelStyle = .texturedRounded
-        button.toolTip = "Line Color and Width"
+        button.toolTip = tooltip(AppLocalizer(preferences: preferences).text(.lineStyle), shortcut: "Cmd+Shift+L")
         button.imagePosition = .imageOnly
         styleButton = button
         return button
@@ -838,6 +898,21 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         path.stroke()
         image.unlockFocus()
         return image
+    }
+
+    private func shortcut(for mode: ScreenshotEditMode) -> String {
+        switch mode {
+        case .line:
+            "L"
+        case .arrow:
+            "A"
+        case .mosaic:
+            "M"
+        }
+    }
+
+    private func tooltip(_ title: String, shortcut: String) -> String {
+        "\(title) (\(shortcut))"
     }
 }
 
