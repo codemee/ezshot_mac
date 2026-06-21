@@ -163,8 +163,16 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         selectTool(.arrow)
     }
 
+    @objc func selectRectangleTool() {
+        selectTool(.rectangle)
+    }
+
     @objc func selectMosaicTool() {
         selectTool(.mosaic)
+    }
+
+    @objc func selectTextTool() {
+        selectTool(.text)
     }
 
     @objc func showLineStyleSettings() {
@@ -405,17 +413,25 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         undoItem.target = self
         windowMenu.addItem(undoItem)
         let lineItem = NSMenuItem(title: localizer.text(.line), action: #selector(selectLineTool), keyEquivalent: "l")
-        lineItem.keyEquivalentModifierMask = []
+        lineItem.keyEquivalentModifierMask = [.option]
         lineItem.target = self
         windowMenu.addItem(lineItem)
         let arrowItem = NSMenuItem(title: localizer.text(.arrow), action: #selector(selectArrowTool), keyEquivalent: "a")
-        arrowItem.keyEquivalentModifierMask = []
+        arrowItem.keyEquivalentModifierMask = [.option]
         arrowItem.target = self
         windowMenu.addItem(arrowItem)
+        let rectangleItem = NSMenuItem(title: localizer.text(.rectangle), action: #selector(selectRectangleTool), keyEquivalent: "r")
+        rectangleItem.keyEquivalentModifierMask = [.option]
+        rectangleItem.target = self
+        windowMenu.addItem(rectangleItem)
         let mosaicItem = NSMenuItem(title: localizer.text(.mosaic), action: #selector(selectMosaicTool), keyEquivalent: "m")
-        mosaicItem.keyEquivalentModifierMask = []
+        mosaicItem.keyEquivalentModifierMask = [.option]
         mosaicItem.target = self
         windowMenu.addItem(mosaicItem)
+        let textItem = NSMenuItem(title: localizer.text(.text), action: #selector(selectTextTool), keyEquivalent: "t")
+        textItem.keyEquivalentModifierMask = [.option]
+        textItem.target = self
+        windowMenu.addItem(textItem)
         let styleItem = NSMenuItem(title: localizer.text(.lineStyle), action: #selector(showLineStyleSettings), keyEquivalent: "l")
         styleItem.keyEquivalentModifierMask = [.command, .shift]
         styleItem.target = self
@@ -531,6 +547,9 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
 
         editor.mode = mode
         currentToolbar()?.syncSelectedMode(mode)
+        if mode == .text {
+            currentToolbar()?.showTextPopoverFromToolbar()
+        }
     }
 
     private func installKeyMonitor() {
@@ -546,7 +565,8 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
     private func handleEditorShortcut(_ event: NSEvent) -> NSEvent? {
         guard
             currentDocumentWindow() != nil,
-            event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+            event.modifierFlags.contains(.option),
+            event.modifierFlags.intersection([.command, .control]).isEmpty
         else {
             return event
         }
@@ -558,8 +578,14 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         case kVK_ANSI_A:
             selectTool(.arrow)
             return nil
+        case kVK_ANSI_R:
+            selectTool(.rectangle)
+            return nil
         case kVK_ANSI_M:
             selectTool(.mosaic)
+            return nil
+        case kVK_ANSI_T:
+            selectTool(.text)
             return nil
         default:
             return event
@@ -786,8 +812,12 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             localizer.text(.line)
         case .arrow:
             localizer.text(.arrow)
+        case .rectangle:
+            localizer.text(.rectangle)
         case .mosaic:
             localizer.text(.mosaic)
+        case .text:
+            localizer.text(.text)
         }
     }
 
@@ -797,8 +827,12 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             "line.diagonal"
         case .arrow:
             "arrow.up.right"
+        case .rectangle:
+            "rectangle"
         case .mosaic:
             "checkerboard.rectangle"
+        case .text:
+            "textformat"
         }
     }
 
@@ -812,6 +846,9 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
 
         editor?.mode = mode
         segmentedControl?.selectedSegment = index
+        if mode == .text {
+            showTextPopoverFromToolbar()
+        }
     }
 
     func syncSelectedMode(_ mode: ScreenshotEditMode) {
@@ -877,6 +914,15 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         showStylePopover(relativeTo: styleButton)
     }
 
+    func showTextPopoverFromToolbar() {
+        guard let segmentedControl, editor != nil else {
+            NSSound.beep()
+            return
+        }
+
+        showTextPopover(relativeTo: segmentedControl)
+    }
+
     private func showStylePopover(relativeTo sender: NSButton) {
         guard let editor else {
             return
@@ -887,6 +933,19 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         }
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 260, height: 92)
+        popover.behavior = .transient
+        popover.contentViewController = content
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+    }
+
+    private func showTextPopover(relativeTo sender: NSView) {
+        guard let editor else {
+            return
+        }
+
+        let content = TextSettingsPopoverViewController(editor: editor, preferences: preferences)
+        let popover = NSPopover()
+        popover.contentSize = NSSize(width: 300, height: 138)
         popover.behavior = .transient
         popover.contentViewController = content
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
@@ -1041,11 +1100,15 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func shortcut(for mode: ScreenshotEditMode) -> String {
         switch mode {
         case .line:
-            "L"
+            "Opt+L"
         case .arrow:
-            "A"
+            "Opt+A"
+        case .rectangle:
+            "Opt+R"
         case .mosaic:
-            "M"
+            "Opt+M"
+        case .text:
+            "Opt+T"
         }
     }
 
@@ -1119,5 +1182,118 @@ private final class LineStylePopoverViewController: NSViewController {
 
     private func updateWidthLabel() {
         widthLabel.stringValue = "\(Int(slider.doubleValue.rounded())) pt"
+    }
+}
+
+@MainActor
+private final class TextSettingsPopoverViewController: NSViewController, NSTextFieldDelegate {
+    private weak var editor: ScreenshotEditorView?
+    private let preferences: PreferencesStore
+    private let textField = NSTextField(string: "")
+    private let fontPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let sizeField = NSTextField(string: "")
+    private let sizeStepper = NSStepper(frame: .zero)
+
+    init(editor: ScreenshotEditorView, preferences: PreferencesStore) {
+        self.editor = editor
+        self.preferences = preferences
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func loadView() {
+        let localizer = AppLocalizer(preferences: preferences)
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 138))
+
+        let textLabel = NSTextField(labelWithString: localizer.text(.textContent))
+        let fontLabel = NSTextField(labelWithString: localizer.text(.font))
+        let sizeLabel = NSTextField(labelWithString: localizer.text(.fontSize))
+
+        textField.stringValue = editor?.textValue ?? ""
+        textField.delegate = self
+        textField.target = self
+        textField.action = #selector(updateTextSettings)
+
+        let families = NSFontManager.shared.availableFontFamilies.sorted()
+        fontPopup.addItems(withTitles: families)
+        if let fontName = editor?.textFontName,
+           let family = NSFont(name: fontName, size: 12)?.familyName,
+           families.contains(family) {
+            fontPopup.selectItem(withTitle: family)
+        }
+        fontPopup.target = self
+        fontPopup.action = #selector(updateTextSettings)
+
+        sizeField.stringValue = "\(Int(editor?.textFontSize ?? 24))"
+        sizeField.alignment = .right
+        sizeField.delegate = self
+        sizeField.target = self
+        sizeField.action = #selector(updateTextSettings)
+
+        sizeStepper.minValue = 8
+        sizeStepper.maxValue = 144
+        sizeStepper.increment = 1
+        sizeStepper.doubleValue = Double(editor?.textFontSize ?? 24)
+        sizeStepper.target = self
+        sizeStepper.action = #selector(updateSizeFromStepper)
+
+        for subview in [textLabel, textField, fontLabel, fontPopup, sizeLabel, sizeField, sizeStepper] {
+            subview.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(subview)
+        }
+
+        NSLayoutConstraint.activate([
+            textLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            textLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
+            textLabel.widthAnchor.constraint(equalToConstant: 72),
+            textField.leadingAnchor.constraint(equalTo: textLabel.trailingAnchor, constant: 12),
+            textField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            textField.centerYAnchor.constraint(equalTo: textLabel.centerYAnchor),
+
+            fontLabel.leadingAnchor.constraint(equalTo: textLabel.leadingAnchor),
+            fontLabel.topAnchor.constraint(equalTo: textLabel.bottomAnchor, constant: 22),
+            fontLabel.widthAnchor.constraint(equalTo: textLabel.widthAnchor),
+            fontPopup.leadingAnchor.constraint(equalTo: textField.leadingAnchor),
+            fontPopup.trailingAnchor.constraint(equalTo: textField.trailingAnchor),
+            fontPopup.centerYAnchor.constraint(equalTo: fontLabel.centerYAnchor),
+
+            sizeLabel.leadingAnchor.constraint(equalTo: textLabel.leadingAnchor),
+            sizeLabel.topAnchor.constraint(equalTo: fontLabel.bottomAnchor, constant: 22),
+            sizeLabel.widthAnchor.constraint(equalTo: textLabel.widthAnchor),
+            sizeField.leadingAnchor.constraint(equalTo: textField.leadingAnchor),
+            sizeField.centerYAnchor.constraint(equalTo: sizeLabel.centerYAnchor),
+            sizeField.widthAnchor.constraint(equalToConstant: 64),
+            sizeStepper.leadingAnchor.constraint(equalTo: sizeField.trailingAnchor, constant: 8),
+            sizeStepper.centerYAnchor.constraint(equalTo: sizeField.centerYAnchor)
+        ])
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        updateTextSettings()
+    }
+
+    @objc private func updateSizeFromStepper() {
+        sizeField.stringValue = "\(Int(sizeStepper.doubleValue.rounded()))"
+        updateTextSettings()
+    }
+
+    @objc private func updateTextSettings() {
+        guard let editor else {
+            return
+        }
+
+        editor.textValue = textField.stringValue
+        if let selectedFamily = fontPopup.selectedItem?.title,
+           let font = NSFontManager.shared.font(withFamily: selectedFamily, traits: [], weight: 5, size: CGFloat(sizeStepper.doubleValue)) {
+            editor.textFontName = font.fontName
+        }
+
+        let size = max(8, min(144, Double(sizeField.stringValue) ?? sizeStepper.doubleValue))
+        sizeStepper.doubleValue = size
+        sizeField.stringValue = "\(Int(size.rounded()))"
+        editor.textFontSize = CGFloat(size)
     }
 }

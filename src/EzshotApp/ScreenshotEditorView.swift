@@ -4,7 +4,9 @@ import EzshotCore
 enum ScreenshotEditMode: String, CaseIterable {
     case line
     case arrow
+    case rectangle
     case mosaic
+    case text
 }
 
 @MainActor
@@ -41,6 +43,21 @@ final class ScreenshotEditorView: NSView {
         set { canvas.lineWidth = newValue }
     }
 
+    var textValue: String {
+        get { canvas.textValue }
+        set { canvas.textValue = newValue }
+    }
+
+    var textFontName: String {
+        get { canvas.textFontName }
+        set { canvas.textFontName = newValue }
+    }
+
+    var textFontSize: CGFloat {
+        get { canvas.textFontSize }
+        set { canvas.textFontSize = newValue }
+    }
+
     init(document: ScreenshotDocument) {
         self.canvas = ScreenshotCanvasView(document: document)
         super.init(frame: .zero)
@@ -50,7 +67,9 @@ final class ScreenshotEditorView: NSView {
         scrollView.autohidesScrollers = false
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .windowBackgroundColor
+        scrollView.backgroundColor = .ezshotEditorBackground
+        scrollView.contentView.drawsBackground = true
+        scrollView.contentView.backgroundColor = .ezshotEditorBackground
         scrollView.documentView = canvas
 
         addSubview(scrollView)
@@ -64,6 +83,7 @@ final class ScreenshotEditorView: NSView {
 
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
+        refreshEditorBackground()
     }
 
     required init?(coder: NSCoder) {
@@ -73,6 +93,19 @@ final class ScreenshotEditorView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(canvas)
+        refreshEditorBackground()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshEditorBackground()
+    }
+
+    private func refreshEditorBackground() {
+        let color = NSColor.ezshotEditorBackground(for: effectiveAppearance)
+        scrollView.backgroundColor = color
+        scrollView.contentView.backgroundColor = color
+        canvas.refreshBackground()
     }
 
     func undo() {
@@ -111,6 +144,7 @@ private final class ScreenshotCanvasView: NSView {
                 return
             }
             onModeChanged?(mode)
+            window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
     }
@@ -118,6 +152,15 @@ private final class ScreenshotCanvasView: NSView {
         didSet { needsDisplay = true }
     }
     var lineWidth: CGFloat = 4 {
+        didSet { needsDisplay = true }
+    }
+    var textValue: String = "Text" {
+        didSet { needsDisplay = true }
+    }
+    var textFontName: String = NSFont.systemFont(ofSize: NSFont.systemFontSize).fontName {
+        didSet { needsDisplay = true }
+    }
+    var textFontSize: CGFloat = 24 {
         didSet { needsDisplay = true }
     }
     var canUndo: Bool {
@@ -137,7 +180,7 @@ private final class ScreenshotCanvasView: NSView {
         self.cropRect = CGRect(origin: .zero, size: document.image.size)
         super.init(frame: NSRect(origin: .zero, size: Self.paddedSize(for: document.image.size)))
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        refreshBackground()
     }
 
     required init?(coder: NSCoder) {
@@ -152,15 +195,40 @@ private final class ScreenshotCanvasView: NSView {
         true
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshBackground()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+
+        for (handle, rect) in cropHandleRects() {
+            addCursorRect(rect.insetBy(dx: -3, dy: -3), cursor: cursor(for: handle))
+        }
+
+        addCursorRect(viewRect(imageBounds), cursor: cursor(for: mode))
+    }
+
+    func refreshBackground() {
+        layer?.backgroundColor = NSColor.ezshotEditorBackground(for: effectiveAppearance).cgColor
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        NSColor.ezshotEditorBackground.setFill()
+        dirtyRect.fill()
         drawImage()
         drawInProgressEdit()
         drawCropControls()
     }
 
     override func keyDown(with event: NSEvent) {
-        guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else {
+        guard
+            event.modifierFlags.contains(.option),
+            event.modifierFlags.intersection([.command, .control]).isEmpty
+        else {
             super.keyDown(with: event)
             return
         }
@@ -170,8 +238,12 @@ private final class ScreenshotCanvasView: NSView {
             mode = .line
         case "a":
             mode = .arrow
+        case "r":
+            mode = .rectangle
         case "m":
             mode = .mosaic
+        case "t":
+            mode = .text
         default:
             super.keyDown(with: event)
         }
@@ -237,8 +309,12 @@ private final class ScreenshotCanvasView: NSView {
                 commitLine(arrow: false)
             case .arrow:
                 commitLine(arrow: true)
+            case .rectangle:
+                commitRectangle()
             case .mosaic:
                 commitMosaic()
+            case .text:
+                commitText()
             }
         case nil:
             break
@@ -308,11 +384,15 @@ private final class ScreenshotCanvasView: NSView {
             drawLine(from: dragStart, to: dragCurrent, arrow: false)
         case .arrow:
             drawLine(from: dragStart, to: dragCurrent, arrow: true)
+        case .rectangle:
+            drawRectangle(dragRect(from: dragStart, to: dragCurrent))
         case .mosaic:
             NSColor.systemBlue.withAlphaComponent(0.18).setFill()
             viewRect(dragRect(from: dragStart, to: dragCurrent)).fill()
             NSColor.systemBlue.setStroke()
             NSBezierPath(rect: viewRect(dragRect(from: dragStart, to: dragCurrent))).stroke()
+        case .text:
+            drawText(at: dragStart)
         }
     }
 
@@ -335,6 +415,18 @@ private final class ScreenshotCanvasView: NSView {
         let path = linePath(from: viewPoint(start), to: viewPoint(end), arrow: arrow)
         lineColor.setStroke()
         path.stroke()
+    }
+
+    private func drawRectangle(_ rect: CGRect) {
+        let path = NSBezierPath(rect: viewRect(rect))
+        path.lineWidth = lineWidth
+        lineColor.setStroke()
+        path.stroke()
+    }
+
+    private func drawText(at point: CGPoint) {
+        let attributed = attributedText()
+        attributed.draw(at: viewPoint(point))
     }
 
     private func linePath(from start: CGPoint, to end: CGPoint, arrow: Bool) -> NSBezierPath {
@@ -390,6 +482,44 @@ private final class ScreenshotCanvasView: NSView {
             context.setLineCap(.round)
             context.addPath(linePath(from: dragStart, to: dragCurrent, arrow: arrow).cgPath)
             context.strokePath()
+        })
+    }
+
+    private func commitRectangle() {
+        guard
+            let dragStart,
+            let dragCurrent
+        else {
+            return
+        }
+
+        let rect = dragRect(from: dragStart, to: dragCurrent).integral.intersection(imageBounds)
+        guard rect.width >= 4, rect.height >= 4 else {
+            return
+        }
+
+        pushUndo()
+        updateDocument(rendered(size: document.image.size) { context in
+            drawDocumentImage(in: context, origin: .zero)
+            context.setStrokeColor(lineColor.cgColor)
+            context.setLineWidth(lineWidth)
+            context.addRect(rect)
+            context.strokePath()
+        })
+    }
+
+    private func commitText() {
+        guard
+            let dragStart,
+            !textValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return
+        }
+
+        pushUndo()
+        updateDocument(rendered(size: document.image.size) { context in
+            drawDocumentImage(in: context, origin: .zero)
+            drawText(at: dragStart, in: context)
         })
     }
 
@@ -501,6 +631,24 @@ private final class ScreenshotCanvasView: NSView {
         context.scaleBy(x: 1, y: -1)
         context.draw(cgImage, in: rect)
         context.restoreGState()
+    }
+
+    private func drawText(at point: CGPoint, in context: CGContext) {
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        attributedText().draw(at: point)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func attributedText() -> NSAttributedString {
+        let font = NSFont(name: textFontName, size: textFontSize) ?? .systemFont(ofSize: textFontSize)
+        return NSAttributedString(
+            string: textValue,
+            attributes: [
+                .font: font,
+                .foregroundColor: lineColor
+            ]
+        )
     }
 
     private func updateDocument(_ image: NSImage) {
@@ -655,5 +803,47 @@ private final class ScreenshotCanvasView: NSView {
 
     private func viewRect(_ imageRect: CGRect) -> CGRect {
         imageRect.offsetBy(dx: imageOrigin.x, dy: imageOrigin.y)
+    }
+
+    private func cursor(for handle: CropHandle) -> NSCursor {
+        switch handle {
+        case .topLeft, .bottomRight:
+            .crosshair
+        case .topRight, .bottomLeft:
+            .crosshair
+        case .top, .bottom:
+            .resizeUpDown
+        case .left, .right:
+            .resizeLeftRight
+        }
+    }
+
+    private func cursor(for mode: ScreenshotEditMode) -> NSCursor {
+        switch mode {
+        case .line:
+            .crosshair
+        case .arrow:
+            .pointingHand
+        case .rectangle:
+            .crosshair
+        case .mosaic:
+            .operationNotAllowed
+        case .text:
+            .iBeam
+        }
+    }
+}
+
+private extension NSColor {
+    static let ezshotEditorBackground = NSColor(name: nil) { appearance in
+        ezshotEditorBackground(for: appearance)
+    }
+
+    static func ezshotEditorBackground(for appearance: NSAppearance) -> NSColor {
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor(calibratedWhite: 0.18, alpha: 1)
+        }
+
+        return NSColor(calibratedWhite: 0.88, alpha: 1)
     }
 }

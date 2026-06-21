@@ -66,10 +66,16 @@ struct AppLocalizer {
         case undo
         case line
         case arrow
+        case rectangle
         case mosaic
+        case text
         case style
         case tools
         case lineStyle
+        case textSettings
+        case textContent
+        case font
+        case fontSize
         case emptyTitle
         case emptyMessage
         case seconds
@@ -107,10 +113,16 @@ struct AppLocalizer {
             .undo: "Undo",
             .line: "Line",
             .arrow: "Arrow",
+            .rectangle: "Rectangle",
             .mosaic: "Mosaic",
+            .text: "Text",
             .style: "Style",
             .tools: "Tools",
             .lineStyle: "Line Color and Width",
+            .textSettings: "Text Settings",
+            .textContent: "Text",
+            .font: "Font",
+            .fontSize: "Font Size",
             .emptyTitle: "Ezshot",
             .emptyMessage: "No screenshots yet",
             .seconds: "seconds",
@@ -149,10 +161,16 @@ struct AppLocalizer {
             .undo: "復原",
             .line: "線條",
             .arrow: "箭頭",
+            .rectangle: "矩形",
             .mosaic: "馬賽克",
+            .text: "文字",
             .style: "樣式",
             .tools: "工具",
             .lineStyle: "線條顏色與粗細",
+            .textSettings: "文字設定",
+            .textContent: "文字",
+            .font: "字型",
+            .fontSize: "字體大小",
             .emptyTitle: "Ezshot",
             .emptyMessage: "尚未有截圖",
             .seconds: "秒",
