@@ -34,6 +34,9 @@ final class CaptureController {
             },
             GlobalHotKey(id: 3, keyCode: UInt32(kVK_ANSI_W), modifiers: [.option, .shift]) { [weak self] in
                 self?.capturePickedWindow()
+            },
+            GlobalHotKey(id: 4, keyCode: UInt32(kVK_ANSI_F), modifiers: [.option, .shift]) { [weak self] in
+                self?.captureFullscreen()
             }
         ]
         hotKeys.forEach { $0.register() }
@@ -45,6 +48,16 @@ final class CaptureController {
         }
 
         showSelectionOverlays()
+    }
+
+    func captureFullscreen() {
+        guard ensureScreenRecordingAccess() else {
+            return
+        }
+
+        captureAfterDelay { [weak self] in
+            self?.captureMainDisplay()
+        }
     }
 
     func captureActiveWindow() {
@@ -250,6 +263,25 @@ final class CaptureController {
         }
     }
 
+    private func captureMainDisplay() {
+        Task {
+            do {
+                let image = try await captureMainDisplayImage()
+                let document = ScreenshotDocument(image: image)
+                if preferences.autoCopyAfterCapture {
+                    document.copyToPasteboard()
+                }
+                await MainActor.run {
+                    self.onCapture(document)
+                }
+            } catch {
+                await MainActor.run {
+                    self.showCaptureFailedAlert(error)
+                }
+            }
+        }
+    }
+
     private func captureWindowImage(_ window: CapturableWindow) throws -> NSImage {
         guard let cgImage = CGWindowListCreateImage(
             .null,
@@ -324,6 +356,30 @@ final class CaptureController {
         }
 
         return NSImage(cgImage: cropped, size: NSSize(width: cropped.width, height: cropped.height))
+    }
+
+    private func captureMainDisplayImage() async throws -> NSImage {
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let mainDisplayID = NSScreen.main?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        guard
+            let display = content.displays.first(where: { $0.displayID == mainDisplayID }) ?? content.displays.first
+        else {
+            throw CaptureError.noDisplayAvailable
+        }
+
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(display.width)
+        configuration.height = Int(display.height)
+        configuration.showsCursor = false
+        configuration.scalesToFit = false
+
+        let cgImage = try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: configuration
+        )
+
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     private func display(containing rect: CGRect, from displays: [SCDisplay]) -> SCDisplay? {

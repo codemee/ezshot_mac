@@ -56,6 +56,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.items.last?.keyEquivalentModifierMask = [.option, .shift]
 
         menu.addItem(NSMenuItem(
+            title: localizer.text(.captureFullscreen),
+            action: #selector(captureFullscreen),
+            keyEquivalent: "f"
+        ))
+        menu.items.last?.keyEquivalentModifierMask = [.option, .shift]
+
+        menu.addItem(NSMenuItem(
             title: localizer.text(.captureActiveWindow),
             action: #selector(captureActiveWindow),
             keyEquivalent: "a"
@@ -182,6 +189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func captureSelection() {
         captureController.captureSelection()
+    }
+
+    @objc private func captureFullscreen() {
+        captureController.captureFullscreen()
     }
 
     @objc private func captureActiveWindow() {

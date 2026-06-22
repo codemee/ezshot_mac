@@ -43,6 +43,7 @@ struct AppLocalizer {
 
     enum Key: String {
         case captureSelection
+        case captureFullscreen
         case captureActiveWindow
         case pickWindow
         case showScreenshots
@@ -92,6 +93,7 @@ struct AppLocalizer {
     private var en: [Key: String] {
         [
             .captureSelection: "Capture Selection",
+            .captureFullscreen: "Capture Full Screen",
             .captureActiveWindow: "Capture Active Window",
             .pickWindow: "Pick Window to Capture",
             .showScreenshots: "Show Screenshots",
@@ -142,6 +144,7 @@ struct AppLocalizer {
     private var zhHant: [Key: String] {
         [
             .captureSelection: "截取區域",
+            .captureFullscreen: "截取全螢幕",
             .captureActiveWindow: "截取焦點視窗",
             .pickWindow: "點選視窗截圖",
             .showScreenshots: "顯示截圖視窗",

@@ -16,6 +16,7 @@ Ezshot 是一個原生 macOS 截圖與圖片標註工具。它提供選單列狀
 - 會以一般 macOS app 形式出現在 `Cmd+Tab`，編輯視窗可透過 `Cmd+Tab` 取得焦點；app switcher 使用粉色圓角底的相機圖示。
 - 全域截圖快捷鍵：
   - `Option+Shift+R`：框選螢幕區域。
+  - `Option+Shift+F`：截取全螢幕。
   - `Option+Shift+A`：截取目前焦點視窗。
   - `Option+Shift+W`：點選要截取的視窗。
 - 點選視窗截圖可以選取 Ezshot 自己的編輯視窗。

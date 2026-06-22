@@ -16,6 +16,7 @@ Ezshot is a small native macOS screenshot and image-markup utility. It runs in t
 - Regular macOS app presence, so editor windows can be focused through `Cmd+Tab`; the app switcher uses a soft pink rounded-square camera icon.
 - Global capture shortcuts:
   - `Option+Shift+R`: select a screen region.
+  - `Option+Shift+F`: capture the full screen.
   - `Option+Shift+A`: capture the current focused window.
   - `Option+Shift+W`: pick a window to capture.
 - Pick-window capture can select Ezshot's own editor windows.

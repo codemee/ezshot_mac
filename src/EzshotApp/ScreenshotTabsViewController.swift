@@ -89,11 +89,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         }
         emptyToolbarDelegate?.refreshChrome()
         toolbarsByWindow.values.forEach { $0.refreshChrome() }
-        if !documentsByWindow.isEmpty {
-            let saveItem = NSMenuItem(title: localizer.text(.save), action: #selector(saveCurrentDocument), keyEquivalent: "s")
-            saveItem.target = self
-            NSApp.mainMenu = makeMainMenu(saveItem: saveItem)
-        }
+        NSApp.mainMenu = makeMainMenu(isDocumentAvailable: !documentsByWindow.isEmpty)
     }
 
     private func selectDocumentWindow(_ window: NSWindow) {
@@ -259,9 +255,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         editorsByWindow[window] = editorView
         toolbarsByWindow[window] = toolbarDelegate
 
-        let saveItem = NSMenuItem(title: AppLocalizer(preferences: preferences).text(.save), action: #selector(saveCurrentDocument), keyEquivalent: "s")
-        saveItem.target = self
-        NSApp.mainMenu = makeMainMenu(saveItem: saveItem)
+        NSApp.mainMenu = makeMainMenu(isDocumentAvailable: true)
 
         return window
     }
@@ -284,10 +278,12 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         orderedWindows.removeAll()
 
         emptyWindow?.orderOut(nil)
+        NSApp.mainMenu = makeMainMenu(isDocumentAvailable: false)
     }
 
     private func showEmptyWindow() {
         if let emptyWindow {
+            NSApp.mainMenu = makeMainMenu(isDocumentAvailable: false)
             emptyWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -337,6 +333,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         window.toolbar = toolbar
         emptyToolbarDelegate = toolbarDelegate
         emptyWindow = window
+        NSApp.mainMenu = makeMainMenu(isDocumentAvailable: false)
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -384,7 +381,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
-    private func makeMainMenu(saveItem: NSMenuItem) -> NSMenu {
+    private func makeMainMenu(isDocumentAvailable: Bool) -> NSMenu {
         let localizer = AppLocalizer(preferences: preferences)
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()
@@ -396,46 +393,55 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         appMenuItem.submenu = appMenu
 
         let fileMenu = NSMenu(title: localizer.text(.file))
-        fileMenu.addItem(saveItem)
-        let saveAsItem = NSMenuItem(title: localizer.text(.saveAs), action: #selector(saveCurrentDocumentAs), keyEquivalent: "s")
-        saveAsItem.keyEquivalentModifierMask = [.command, .shift]
-        saveAsItem.target = self
-        fileMenu.addItem(saveAsItem)
-        fileMenu.addItem(NSMenuItem(title: localizer.text(.copyEditedImage), action: #selector(copyCurrentImage), keyEquivalent: "c"))
-        fileMenu.items.last?.target = self
+        fileMenu.autoenablesItems = false
+        if isDocumentAvailable {
+            let saveItem = NSMenuItem(title: localizer.text(.save), action: #selector(saveCurrentDocument), keyEquivalent: "s")
+            saveItem.target = self
+            fileMenu.addItem(saveItem)
+            let saveAsItem = NSMenuItem(title: localizer.text(.saveAs), action: #selector(saveCurrentDocumentAs), keyEquivalent: "s")
+            saveAsItem.keyEquivalentModifierMask = [.command, .shift]
+            saveAsItem.target = self
+            fileMenu.addItem(saveAsItem)
+            let copyItem = NSMenuItem(title: localizer.text(.copyEditedImage), action: #selector(copyCurrentImage), keyEquivalent: "c")
+            copyItem.target = self
+            fileMenu.addItem(copyItem)
+        }
         fileMenuItem.submenu = fileMenu
 
         let windowMenu = NSMenu(title: localizer.text(.window))
+        windowMenu.autoenablesItems = false
         windowMenu.addItem(NSMenuItem(title: localizer.text(.showPreviousTab), action: #selector(NSWindow.selectPreviousTab(_:)), keyEquivalent: "{"))
         windowMenu.addItem(NSMenuItem(title: localizer.text(.showNextTab), action: #selector(NSWindow.selectNextTab(_:)), keyEquivalent: "}"))
-        windowMenu.addItem(.separator())
-        let undoItem = NSMenuItem(title: localizer.text(.undo), action: #selector(undoCurrentEdit), keyEquivalent: "z")
-        undoItem.target = self
-        windowMenu.addItem(undoItem)
-        let lineItem = NSMenuItem(title: localizer.text(.line), action: #selector(selectLineTool), keyEquivalent: "l")
-        lineItem.keyEquivalentModifierMask = [.option]
-        lineItem.target = self
-        windowMenu.addItem(lineItem)
-        let arrowItem = NSMenuItem(title: localizer.text(.arrow), action: #selector(selectArrowTool), keyEquivalent: "a")
-        arrowItem.keyEquivalentModifierMask = [.option]
-        arrowItem.target = self
-        windowMenu.addItem(arrowItem)
-        let rectangleItem = NSMenuItem(title: localizer.text(.rectangle), action: #selector(selectRectangleTool), keyEquivalent: "r")
-        rectangleItem.keyEquivalentModifierMask = [.option]
-        rectangleItem.target = self
-        windowMenu.addItem(rectangleItem)
-        let mosaicItem = NSMenuItem(title: localizer.text(.mosaic), action: #selector(selectMosaicTool), keyEquivalent: "m")
-        mosaicItem.keyEquivalentModifierMask = [.option]
-        mosaicItem.target = self
-        windowMenu.addItem(mosaicItem)
-        let textItem = NSMenuItem(title: localizer.text(.text), action: #selector(selectTextTool), keyEquivalent: "t")
-        textItem.keyEquivalentModifierMask = [.option]
-        textItem.target = self
-        windowMenu.addItem(textItem)
-        let styleItem = NSMenuItem(title: localizer.text(.lineStyle), action: #selector(showLineStyleSettings), keyEquivalent: "l")
-        styleItem.keyEquivalentModifierMask = [.command, .shift]
-        styleItem.target = self
-        windowMenu.addItem(styleItem)
+        if isDocumentAvailable {
+            windowMenu.addItem(.separator())
+            let undoItem = NSMenuItem(title: localizer.text(.undo), action: #selector(undoCurrentEdit), keyEquivalent: "z")
+            undoItem.target = self
+            windowMenu.addItem(undoItem)
+            let lineItem = NSMenuItem(title: localizer.text(.line), action: #selector(selectLineTool), keyEquivalent: "l")
+            lineItem.keyEquivalentModifierMask = [.option]
+            lineItem.target = self
+            windowMenu.addItem(lineItem)
+            let arrowItem = NSMenuItem(title: localizer.text(.arrow), action: #selector(selectArrowTool), keyEquivalent: "a")
+            arrowItem.keyEquivalentModifierMask = [.option]
+            arrowItem.target = self
+            windowMenu.addItem(arrowItem)
+            let rectangleItem = NSMenuItem(title: localizer.text(.rectangle), action: #selector(selectRectangleTool), keyEquivalent: "r")
+            rectangleItem.keyEquivalentModifierMask = [.option]
+            rectangleItem.target = self
+            windowMenu.addItem(rectangleItem)
+            let mosaicItem = NSMenuItem(title: localizer.text(.mosaic), action: #selector(selectMosaicTool), keyEquivalent: "m")
+            mosaicItem.keyEquivalentModifierMask = [.option]
+            mosaicItem.target = self
+            windowMenu.addItem(mosaicItem)
+            let textItem = NSMenuItem(title: localizer.text(.text), action: #selector(selectTextTool), keyEquivalent: "t")
+            textItem.keyEquivalentModifierMask = [.option]
+            textItem.target = self
+            windowMenu.addItem(textItem)
+            let styleItem = NSMenuItem(title: localizer.text(.lineStyle), action: #selector(showLineStyleSettings), keyEquivalent: "l")
+            styleItem.keyEquivalentModifierMask = [.command, .shift]
+            styleItem.target = self
+            windowMenu.addItem(styleItem)
+        }
         windowMenuItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
 
@@ -627,6 +633,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private var saveItem: NSToolbarItem?
     private var saveAsItem: NSToolbarItem?
     private var undoItem: NSToolbarItem?
+    private var copyItem: NSToolbarItem?
     private var delayItem: NSToolbarItem?
     private var styleItem: NSToolbarItem?
     private var toolsItem: NSToolbarItem?
@@ -654,11 +661,19 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Item.save, Item.saveAs, Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
+        if editor == nil {
+            return [Item.delay, .flexibleSpace, Item.language, Item.appearance]
+        }
+
+        return [Item.save, Item.saveAs, Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Item.save, Item.saveAs, Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
+        if editor == nil {
+            return [Item.delay, .flexibleSpace, Item.language, Item.appearance]
+        }
+
+        return [Item.save, Item.saveAs, Item.undo, Item.copy, Item.delay, .space, Item.tools, Item.style, .flexibleSpace, Item.language, Item.appearance]
     }
 
     func toolbar(
@@ -746,6 +761,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
                 modifiers: [.command],
                 isEnabled: editor != nil
             )
+            copyItem = item
             return item
         }
 
@@ -840,6 +856,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         item.label = localizer.text(.tools)
         item.paletteLabel = localizer.text(.tools)
         item.view = control
+        item.isEnabled = editor != nil
         item.menuFormRepresentation = makeToolsMenuItem(localizer: localizer)
         toolsItem = item
         return item
@@ -1022,6 +1039,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func makeToolsMenuItem(localizer: AppLocalizer) -> NSMenuItem {
         let item = NSMenuItem(title: localizer.text(.tools), action: nil, keyEquivalent: "")
         let menu = NSMenu(title: localizer.text(.tools))
+        menu.autoenablesItems = false
 
         for mode in ScreenshotEditMode.allCases {
             let modeItem = makeToolbarMenuItem(
@@ -1084,6 +1102,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
 
     func refreshChrome() {
         let localizer = AppLocalizer(preferences: preferences)
+        refreshAvailability(localizer: localizer)
         saveItem?.label = localizer.text(.save)
         saveItem?.paletteLabel = localizer.text(.save)
         saveItem?.toolTip = tooltip(localizer.text(.save), shortcut: "Cmd+S")
@@ -1113,6 +1132,16 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             shortcut: "z",
             modifiers: [.command],
             isEnabled: editor?.canUndo == true
+        )
+        copyItem?.label = localizer.text(.copyEditedImage)
+        copyItem?.paletteLabel = localizer.text(.copyEditedImage)
+        copyItem?.toolTip = tooltip(localizer.text(.copyEditedImage), shortcut: "Cmd+C")
+        copyItem?.menuFormRepresentation = makeToolbarMenuItem(
+            title: localizer.text(.copyEditedImage),
+            action: #selector(copyImage),
+            shortcut: "c",
+            modifiers: [.command],
+            isEnabled: editor != nil
         )
         delayItem?.label = localizer.text(.delay)
         delayItem?.paletteLabel = localizer.text(.delay)
@@ -1152,6 +1181,25 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         }
         refreshDelay()
         refreshStyle()
+    }
+
+    private func refreshAvailability(localizer: AppLocalizer) {
+        let hasEditor = editor != nil
+        saveItem?.isEnabled = hasEditor
+        saveAsItem?.isEnabled = hasEditor
+        copyItem?.isEnabled = hasEditor
+        styleItem?.isEnabled = hasEditor
+        toolsItem?.isEnabled = hasEditor
+        undoItem?.isEnabled = editor?.canUndo == true
+
+        styleButton?.isEnabled = hasEditor
+        segmentedControl?.isEnabled = hasEditor
+
+        saveItem?.menuFormRepresentation?.isEnabled = hasEditor
+        saveAsItem?.menuFormRepresentation?.isEnabled = hasEditor
+        copyItem?.menuFormRepresentation?.isEnabled = hasEditor
+        styleItem?.menuFormRepresentation?.isEnabled = hasEditor
+        toolsItem?.menuFormRepresentation = makeToolsMenuItem(localizer: localizer)
     }
 
     private func refreshStyle() {
@@ -1237,6 +1285,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         button.bezelStyle = .texturedRounded
         button.toolTip = tooltip(AppLocalizer(preferences: preferences).text(.lineStyle), shortcut: "Cmd+Shift+L")
         button.imagePosition = .imageOnly
+        button.isEnabled = editor != nil
         styleButton = button
         return button
     }
