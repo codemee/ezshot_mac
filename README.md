@@ -28,7 +28,7 @@ Ezshot is a small native macOS screenshot and image-markup utility. It runs in t
 - Editor tools:
   - Persistent crop handles with live crop preview.
   - Brush, arrow, rectangle, mosaic, and text tools.
-  - Tool shortcuts use `Option` plus the tool letter, such as `Option+L`, `Option+R`, and `Option+T`.
+  - Tool shortcuts use `Option` plus the tool letter, such as `Option+P`, `Option+R`, and `Option+T`.
   - Undo for edits.
   - Copy edited image to the clipboard.
   - Line color and width controls.

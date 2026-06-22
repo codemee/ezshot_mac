@@ -32,6 +32,8 @@ Prefer `scripts/run-app.sh` for manual app testing. Screen Recording permission 
 
 Follow Swift and AppKit conventions. Use 4-space indentation, `PascalCase` for types, `camelCase` for properties and methods, and keep files focused on one responsibility. Prefer the project’s existing AppKit patterns over introducing a new UI framework. Keep menu and toolbar text routed through the localizer when user-facing strings are added.
 
+When adding or changing user-visible features, shortcuts, menu items, or toolbar behavior, update both `README.md` and `README.zh_TW.md` as needed. Keep shortcut labels consistent across menus, toolbar tooltips, the localizer, and documentation.
+
 ## Testing Guidelines
 
 Add tests with new core behavior, especially preferences, document saving, image mutation, filenames, and undo-related model state. Keep tests in `tests/EzshotCoreTests/` unless a future Swift test framework is introduced. Run `swift build` and `swift run ezshot-core-tests` before committing.

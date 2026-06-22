@@ -235,7 +235,7 @@ private final class ScreenshotCanvasView: NSView {
         }
 
         switch event.charactersIgnoringModifiers?.lowercased() {
-        case "l":
+        case "p":
             mode = .line
         case "a":
             mode = .arrow

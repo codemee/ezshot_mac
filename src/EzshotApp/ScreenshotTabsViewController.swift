@@ -417,7 +417,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
             let undoItem = NSMenuItem(title: localizer.text(.undo), action: #selector(undoCurrentEdit), keyEquivalent: "z")
             undoItem.target = self
             windowMenu.addItem(undoItem)
-            let lineItem = NSMenuItem(title: localizer.text(.line), action: #selector(selectLineTool), keyEquivalent: "l")
+            let lineItem = NSMenuItem(title: localizer.text(.line), action: #selector(selectLineTool), keyEquivalent: "p")
             lineItem.keyEquivalentModifierMask = [.option]
             lineItem.target = self
             windowMenu.addItem(lineItem)
@@ -578,7 +578,7 @@ final class ScreenshotTabsViewController: NSObject, NSWindowDelegate {
         }
 
         switch Int(event.keyCode) {
-        case kVK_ANSI_L:
+        case kVK_ANSI_P:
             selectTool(.line)
             return nil
         case kVK_ANSI_A:
@@ -1309,7 +1309,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func shortcut(for mode: ScreenshotEditMode) -> String {
         switch mode {
         case .line:
-            "Opt+L"
+            "Opt+P"
         case .arrow:
             "Opt+A"
         case .rectangle:
@@ -1324,7 +1324,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func shortcutKey(for mode: ScreenshotEditMode) -> String {
         switch mode {
         case .line:
-            "l"
+            "p"
         case .arrow:
             "a"
         case .rectangle:
