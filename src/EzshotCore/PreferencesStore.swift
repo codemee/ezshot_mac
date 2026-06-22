@@ -5,6 +5,7 @@ public final class PreferencesStore {
     public static let captureDelaySecondsKey = "captureDelaySeconds"
     public static let languageModeKey = "languageMode"
     public static let appearanceModeKey = "appearanceMode"
+    public static let launchAtLoginKey = "launchAtLogin"
 
     private let defaults: UserDefaults
 
@@ -51,6 +52,18 @@ public final class PreferencesStore {
         }
         set {
             defaults.set(newValue, forKey: Self.appearanceModeKey)
+        }
+    }
+
+    public var launchAtLogin: Bool {
+        get {
+            guard defaults.object(forKey: Self.launchAtLoginKey) != nil else {
+                return false
+            }
+            return defaults.bool(forKey: Self.launchAtLoginKey)
+        }
+        set {
+            defaults.set(newValue, forKey: Self.launchAtLoginKey)
         }
     }
 }

@@ -47,6 +47,8 @@ struct AppLocalizer {
         case pickWindow
         case showScreenshots
         case autoCopy
+        case launchAtLogin
+        case launchAtLoginFailed
         case delay
         case language
         case appearance
@@ -94,6 +96,8 @@ struct AppLocalizer {
             .pickWindow: "Pick Window to Capture",
             .showScreenshots: "Show Screenshots",
             .autoCopy: "Auto Copy After Capture",
+            .launchAtLogin: "Open at Login",
+            .launchAtLoginFailed: "Ezshot could not update the Open at Login setting.",
             .delay: "Capture Delay",
             .language: "Language",
             .appearance: "Appearance",
@@ -111,7 +115,7 @@ struct AppLocalizer {
             .showPreviousTab: "Show Previous Tab",
             .showNextTab: "Show Next Tab",
             .undo: "Undo",
-            .line: "Line",
+            .line: "Brush",
             .arrow: "Arrow",
             .rectangle: "Rectangle",
             .mosaic: "Mosaic",
@@ -142,6 +146,8 @@ struct AppLocalizer {
             .pickWindow: "點選視窗截圖",
             .showScreenshots: "顯示截圖視窗",
             .autoCopy: "截圖後自動複製",
+            .launchAtLogin: "登入後自動開啟",
+            .launchAtLoginFailed: "Ezshot 無法更新登入後自動開啟設定。",
             .delay: "延遲截圖",
             .language: "語言",
             .appearance: "外觀",
@@ -159,7 +165,7 @@ struct AppLocalizer {
             .showPreviousTab: "顯示上一個頁籤",
             .showNextTab: "顯示下一個頁籤",
             .undo: "復原",
-            .line: "線條",
+            .line: "畫筆",
             .arrow: "箭頭",
             .rectangle: "矩形",
             .mosaic: "馬賽克",

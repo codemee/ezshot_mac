@@ -676,6 +676,13 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             item.target = self
             item.action = #selector(save)
             item.isEnabled = editor != nil
+            item.menuFormRepresentation = makeToolbarMenuItem(
+                title: localizer.text(.save),
+                action: #selector(save),
+                shortcut: "s",
+                modifiers: [.command],
+                isEnabled: editor != nil
+            )
             saveItem = item
             return item
         }
@@ -690,6 +697,13 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             item.target = self
             item.action = #selector(saveAs)
             item.isEnabled = editor != nil
+            item.menuFormRepresentation = makeToolbarMenuItem(
+                title: localizer.text(.saveAs),
+                action: #selector(saveAs),
+                shortcut: "s",
+                modifiers: [.command, .shift],
+                isEnabled: editor != nil
+            )
             saveAsItem = item
             return item
         }
@@ -704,6 +718,13 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             item.target = self
             item.action = #selector(undo)
             item.isEnabled = editor?.canUndo == true
+            item.menuFormRepresentation = makeToolbarMenuItem(
+                title: localizer.text(.undo),
+                action: #selector(undo),
+                shortcut: "z",
+                modifiers: [.command],
+                isEnabled: editor?.canUndo == true
+            )
             undoItem = item
             return item
         }
@@ -718,6 +739,13 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             item.target = self
             item.action = #selector(copyImage)
             item.isEnabled = editor != nil
+            item.menuFormRepresentation = makeToolbarMenuItem(
+                title: localizer.text(.copyEditedImage),
+                action: #selector(copyImage),
+                shortcut: "c",
+                modifiers: [.command],
+                isEnabled: editor != nil
+            )
             return item
         }
 
@@ -728,6 +756,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             item.paletteLabel = localizer.text(.delay)
             item.toolTip = CaptureDelayMenuController.localizedLabel(for: preferences.captureDelaySeconds, preferences: preferences)
             item.view = makeDelayButton()
+            item.menuFormRepresentation = makeDelayMenuItem(localizer: localizer)
             delayItem = item
             return item
         }
@@ -740,6 +769,13 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             item.toolTip = tooltip(localizer.text(.lineStyle), shortcut: "Cmd+Shift+L")
             item.view = makeStyleButton()
             item.isEnabled = editor != nil
+            item.menuFormRepresentation = makeToolbarMenuItem(
+                title: localizer.text(.lineStyle),
+                action: #selector(showStylePopoverFromMenu),
+                shortcut: "l",
+                modifiers: [.command, .shift],
+                isEnabled: editor != nil
+            )
             styleItem = item
             return item
         }
@@ -757,6 +793,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             ) { [weak self] button in
                 self?.languageButton = button
             }
+            item.menuFormRepresentation = makeLanguageMenuItem(localizer: localizer)
             languageItem = item
             return item
         }
@@ -774,6 +811,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             ) { [weak self] button in
                 self?.appearanceButton = button
             }
+            item.menuFormRepresentation = makeAppearanceMenuItem(localizer: localizer)
             appearanceItem = item
             return item
         }
@@ -802,6 +840,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         item.label = localizer.text(.tools)
         item.paletteLabel = localizer.text(.tools)
         item.view = control
+        item.menuFormRepresentation = makeToolsMenuItem(localizer: localizer)
         toolsItem = item
         return item
     }
@@ -824,7 +863,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func symbolName(for mode: ScreenshotEditMode) -> String {
         switch mode {
         case .line:
-            "line.diagonal"
+            "pencil.tip"
         case .arrow:
             "arrow.up.right"
         case .rectangle:
@@ -842,10 +881,23 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             return
         }
 
-        let mode = ScreenshotEditMode.allCases[index]
+        selectMode(ScreenshotEditMode.allCases[index])
+    }
 
+    @objc private func selectModeFromMenu(_ sender: NSMenuItem) {
+        guard
+            let rawValue = sender.representedObject as? String,
+            let mode = ScreenshotEditMode(rawValue: rawValue)
+        else {
+            return
+        }
+
+        selectMode(mode)
+    }
+
+    private func selectMode(_ mode: ScreenshotEditMode) {
         editor?.mode = mode
-        segmentedControl?.selectedSegment = index
+        syncSelectedMode(mode)
         if mode == .text {
             showTextPopoverFromToolbar()
         }
@@ -857,6 +909,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         }
 
         segmentedControl?.selectedSegment = index
+        toolsItem?.menuFormRepresentation = makeToolsMenuItem(localizer: AppLocalizer(preferences: preferences))
     }
 
     @objc private func undo() {
@@ -874,6 +927,10 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
 
     @objc private func copyImage() {
         editor?.copyImageToPasteboard()
+    }
+
+    @objc private func showStylePopoverFromMenu() {
+        showStylePopoverFromToolbar()
     }
 
     @objc private func showDelaySettings(_ sender: NSButton) {
@@ -906,24 +963,34 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     }
 
     func showStylePopoverFromToolbar() {
-        guard let styleButton else {
+        if let styleButton, styleButton.window != nil {
+            showStylePopover(relativeTo: styleButton)
+            return
+        }
+
+        guard let editor else {
             NSSound.beep()
             return
         }
 
-        showStylePopover(relativeTo: styleButton)
+        showStylePopover(relativeTo: editor)
     }
 
     func showTextPopoverFromToolbar() {
-        guard let segmentedControl, editor != nil else {
+        if let segmentedControl, segmentedControl.window != nil {
+            showTextPopover(relativeTo: segmentedControl)
+            return
+        }
+
+        guard let editor else {
             NSSound.beep()
             return
         }
 
-        showTextPopover(relativeTo: segmentedControl)
+        showTextPopover(relativeTo: editor)
     }
 
-    private func showStylePopover(relativeTo sender: NSButton) {
+    private func showStylePopover(relativeTo sender: NSView) {
         guard let editor else {
             return
         }
@@ -936,6 +1003,59 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         popover.behavior = .transient
         popover.contentViewController = content
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+    }
+
+    private func makeToolbarMenuItem(
+        title: String,
+        action: Selector,
+        shortcut: String = "",
+        modifiers: NSEvent.ModifierFlags = [],
+        isEnabled: Bool = true
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: shortcut)
+        item.keyEquivalentModifierMask = modifiers
+        item.target = self
+        item.isEnabled = isEnabled
+        return item
+    }
+
+    private func makeToolsMenuItem(localizer: AppLocalizer) -> NSMenuItem {
+        let item = NSMenuItem(title: localizer.text(.tools), action: nil, keyEquivalent: "")
+        let menu = NSMenu(title: localizer.text(.tools))
+
+        for mode in ScreenshotEditMode.allCases {
+            let modeItem = makeToolbarMenuItem(
+                title: title(for: mode, localizer: localizer),
+                action: #selector(selectModeFromMenu(_:)),
+                shortcut: shortcutKey(for: mode),
+                modifiers: [.option],
+                isEnabled: editor != nil
+            )
+            modeItem.representedObject = mode.rawValue
+            modeItem.state = editor?.mode == mode ? .on : .off
+            menu.addItem(modeItem)
+        }
+
+        item.submenu = menu
+        return item
+    }
+
+    private func makeDelayMenuItem(localizer: AppLocalizer) -> NSMenuItem {
+        let item = NSMenuItem(title: localizer.text(.delay), action: nil, keyEquivalent: "")
+        item.submenu = delayMenuController.makeMenu()
+        return item
+    }
+
+    private func makeLanguageMenuItem(localizer: AppLocalizer) -> NSMenuItem {
+        let item = NSMenuItem(title: localizer.text(.language), action: nil, keyEquivalent: "")
+        item.submenu = settingsMenuController.makeLanguageMenu(localizer: localizer)
+        return item
+    }
+
+    private func makeAppearanceMenuItem(localizer: AppLocalizer) -> NSMenuItem {
+        let item = NSMenuItem(title: localizer.text(.appearance), action: nil, keyEquivalent: "")
+        item.submenu = settingsMenuController.makeAppearanceMenu(localizer: localizer)
+        return item
     }
 
     private func showTextPopover(relativeTo sender: NSView) {
@@ -953,6 +1073,13 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
 
     func refreshUndo() {
         undoItem?.isEnabled = editor?.canUndo == true
+        undoItem?.menuFormRepresentation = makeToolbarMenuItem(
+            title: AppLocalizer(preferences: preferences).text(.undo),
+            action: #selector(undo),
+            shortcut: "z",
+            modifiers: [.command],
+            isEnabled: editor?.canUndo == true
+        )
     }
 
     func refreshChrome() {
@@ -960,25 +1087,57 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
         saveItem?.label = localizer.text(.save)
         saveItem?.paletteLabel = localizer.text(.save)
         saveItem?.toolTip = tooltip(localizer.text(.save), shortcut: "Cmd+S")
+        saveItem?.menuFormRepresentation = makeToolbarMenuItem(
+            title: localizer.text(.save),
+            action: #selector(save),
+            shortcut: "s",
+            modifiers: [.command],
+            isEnabled: editor != nil
+        )
         saveAsItem?.label = localizer.text(.saveAs)
         saveAsItem?.paletteLabel = localizer.text(.saveAs)
         saveAsItem?.toolTip = tooltip(localizer.text(.saveAs), shortcut: "Cmd+Shift+S")
+        saveAsItem?.menuFormRepresentation = makeToolbarMenuItem(
+            title: localizer.text(.saveAs),
+            action: #selector(saveAs),
+            shortcut: "s",
+            modifiers: [.command, .shift],
+            isEnabled: editor != nil
+        )
         undoItem?.label = localizer.text(.undo)
         undoItem?.paletteLabel = localizer.text(.undo)
         undoItem?.toolTip = tooltip(localizer.text(.undo), shortcut: "Cmd+Z")
+        undoItem?.menuFormRepresentation = makeToolbarMenuItem(
+            title: localizer.text(.undo),
+            action: #selector(undo),
+            shortcut: "z",
+            modifiers: [.command],
+            isEnabled: editor?.canUndo == true
+        )
         delayItem?.label = localizer.text(.delay)
         delayItem?.paletteLabel = localizer.text(.delay)
+        delayItem?.menuFormRepresentation = makeDelayMenuItem(localizer: localizer)
         styleItem?.label = localizer.text(.style)
         styleItem?.paletteLabel = localizer.text(.lineStyle)
         styleItem?.toolTip = tooltip(localizer.text(.lineStyle), shortcut: "Cmd+Shift+L")
+        styleItem?.menuFormRepresentation = makeToolbarMenuItem(
+            title: localizer.text(.lineStyle),
+            action: #selector(showStylePopoverFromMenu),
+            shortcut: "l",
+            modifiers: [.command, .shift],
+            isEnabled: editor != nil
+        )
         toolsItem?.label = localizer.text(.tools)
         toolsItem?.paletteLabel = localizer.text(.tools)
+        toolsItem?.menuFormRepresentation = makeToolsMenuItem(localizer: localizer)
         languageItem?.label = localizer.text(.language)
         languageItem?.paletteLabel = localizer.text(.language)
         languageItem?.toolTip = localizer.text(.language)
+        languageItem?.menuFormRepresentation = makeLanguageMenuItem(localizer: localizer)
         appearanceItem?.label = localizer.text(.appearance)
         appearanceItem?.paletteLabel = localizer.text(.appearance)
         appearanceItem?.toolTip = localizer.text(.appearance)
+        appearanceItem?.menuFormRepresentation = makeAppearanceMenuItem(localizer: localizer)
         languageButton?.toolTip = localizer.text(.language)
         appearanceButton?.toolTip = localizer.text(.appearance)
         styleButton?.toolTip = tooltip(localizer.text(.lineStyle), shortcut: "Cmd+Shift+L")
@@ -1006,6 +1165,7 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
     private func refreshDelay() {
         let label = CaptureDelayMenuController.localizedLabel(for: preferences.captureDelaySeconds, preferences: preferences)
         delayItem?.toolTip = label
+        delayItem?.menuFormRepresentation = makeDelayMenuItem(localizer: AppLocalizer(preferences: preferences))
         delayButton?.toolTip = label
         delayButton?.image = makeDelayImage()
     }
@@ -1109,6 +1269,21 @@ private final class ScreenshotEditorToolbarDelegate: NSObject, NSToolbarDelegate
             "Opt+M"
         case .text:
             "Opt+T"
+        }
+    }
+
+    private func shortcutKey(for mode: ScreenshotEditMode) -> String {
+        switch mode {
+        case .line:
+            "l"
+        case .arrow:
+            "a"
+        case .rectangle:
+            "r"
+        case .mosaic:
+            "m"
+        case .text:
+            "t"
         }
     }
 

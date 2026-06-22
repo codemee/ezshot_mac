@@ -1,5 +1,6 @@
 import AppKit
 import EzshotCore
+import ServiceManagement
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
     private var autoCopyItem: NSMenuItem?
+    private var launchAtLoginItem: NSMenuItem?
     private var delaySettingsController: CaptureDelayPopoverViewController?
     private lazy var settingsMenuController = AppSettingsMenuController(preferences: preferences) { [weak self] in
         self?.refreshChrome()
@@ -82,6 +84,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.autoCopyItem = autoCopyItem
         updateAutoCopyMenuItem()
 
+        let launchAtLoginItem = NSMenuItem(
+            title: localizer.text(.launchAtLogin),
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        menu.addItem(launchAtLoginItem)
+        self.launchAtLoginItem = launchAtLoginItem
+        syncLaunchAtLoginPreference()
+        updateLaunchAtLoginMenuItem()
+
         menu.addItem(.separator())
         let delaySettingsController = CaptureDelayPopoverViewController(preferences: preferences)
         let delaySettingsItem = NSMenuItem()
@@ -116,6 +128,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateAutoCopyMenuItem() {
         autoCopyItem?.state = preferences.autoCopyAfterCapture ? .on : .off
+    }
+
+    private func updateLaunchAtLoginMenuItem() {
+        launchAtLoginItem?.state = preferences.launchAtLogin ? .on : .off
+    }
+
+    private func syncLaunchAtLoginPreference() {
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            preferences.launchAtLogin = true
+        case .notRegistered:
+            preferences.launchAtLogin = false
+        default:
+            break
+        }
     }
 
     private func refreshChrome() {
@@ -173,6 +200,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleAutoCopy() {
         preferences.autoCopyAfterCapture.toggle()
         updateAutoCopyMenuItem()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let newValue = !preferences.launchAtLogin
+
+        do {
+            if newValue {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            preferences.launchAtLogin = newValue
+        } catch {
+            let localizer = AppLocalizer(preferences: preferences)
+            let alert = NSAlert(error: error)
+            alert.messageText = localizer.text(.launchAtLoginFailed)
+            alert.icon = NSApp.applicationIconImage
+            alert.runModal()
+            syncLaunchAtLoginPreference()
+        }
+
+        updateLaunchAtLoginMenuItem()
     }
 
     @objc private func quit() {

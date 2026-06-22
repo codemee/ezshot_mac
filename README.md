@@ -26,7 +26,7 @@ Ezshot is a small native macOS screenshot and image-markup utility. It runs in t
 - Drag image files into an empty or existing editor window to import them as new editable tabs. Imported tabs use the original file name as their title.
 - Editor tools:
   - Persistent crop handles with live crop preview.
-  - Line, arrow, rectangle, mosaic, and text tools.
+  - Brush, arrow, rectangle, mosaic, and text tools.
   - Tool shortcuts use `Option` plus the tool letter, such as `Option+L`, `Option+R`, and `Option+T`.
   - Undo for edits.
   - Copy edited image to the clipboard.
@@ -35,6 +35,7 @@ Ezshot is a small native macOS screenshot and image-markup utility. It runs in t
   - Tool-specific cursors over the image area.
 - Editor canvas background adapts to light and dark appearances to keep the image boundary clear.
 - Optional automatic clipboard copy after capture.
+- Optional Open at Login setting.
 - Language setting for system language, Traditional Chinese, or English. Unsupported system languages fall back to English.
 - Appearance setting for system theme, light mode, or dark mode.
 

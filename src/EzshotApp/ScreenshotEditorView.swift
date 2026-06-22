@@ -173,6 +173,7 @@ private final class ScreenshotCanvasView: NSView {
     private var cropRect: CGRect
     private var cropRectAtDragStart: CGRect?
     private var cropDragViewStart: CGPoint?
+    private var freehandPoints: [CGPoint] = []
     private var history: [NSImage] = []
 
     init(document: ScreenshotDocument) {
@@ -255,6 +256,7 @@ private final class ScreenshotCanvasView: NSView {
         let point = boundedImagePoint(convertViewPointToImagePoint(rawViewPoint))
         dragStart = point
         dragCurrent = point
+        freehandPoints = mode == .line ? [point] : []
 
         if let cropHandle = cropHandle(atViewPoint: rawViewPoint) {
             dragOperation = .crop(cropHandle)
@@ -291,6 +293,9 @@ private final class ScreenshotCanvasView: NSView {
         } else {
             let point = boundedImagePoint(convertToImagePoint(event.locationInWindow))
             dragCurrent = point
+            if mode == .line {
+                appendFreehandPoint(point)
+            }
         }
 
         needsDisplay = true
@@ -306,7 +311,7 @@ private final class ScreenshotCanvasView: NSView {
         case .draw:
             switch mode {
             case .line:
-                commitLine(arrow: false)
+                commitBrush()
             case .arrow:
                 commitLine(arrow: true)
             case .rectangle:
@@ -325,6 +330,7 @@ private final class ScreenshotCanvasView: NSView {
         dragOperation = nil
         cropRectAtDragStart = nil
         cropDragViewStart = nil
+        freehandPoints = []
         needsDisplay = true
     }
 
@@ -381,7 +387,7 @@ private final class ScreenshotCanvasView: NSView {
 
         switch mode {
         case .line:
-            drawLine(from: dragStart, to: dragCurrent, arrow: false)
+            drawBrush(points: freehandPreviewPoints())
         case .arrow:
             drawLine(from: dragStart, to: dragCurrent, arrow: true)
         case .rectangle:
@@ -413,6 +419,12 @@ private final class ScreenshotCanvasView: NSView {
 
     private func drawLine(from start: CGPoint, to end: CGPoint, arrow: Bool) {
         let path = linePath(from: viewPoint(start), to: viewPoint(end), arrow: arrow)
+        lineColor.setStroke()
+        path.stroke()
+    }
+
+    private func drawBrush(points: [CGPoint]) {
+        let path = freehandPath(points: points.map(viewPoint))
         lineColor.setStroke()
         path.stroke()
     }
@@ -451,6 +463,23 @@ private final class ScreenshotCanvasView: NSView {
         return path
     }
 
+    private func freehandPath(points: [CGPoint]) -> NSBezierPath {
+        let path = NSBezierPath()
+        path.lineWidth = lineWidth
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+
+        guard let first = points.first else {
+            return path
+        }
+
+        path.move(to: first)
+        for point in points.dropFirst() {
+            path.line(to: point)
+        }
+        return path
+    }
+
     private func commitCrop() {
         let rect = cropRect.integral.intersection(imageBounds)
         guard rect.width >= 4, rect.height >= 4, rect != imageBounds else {
@@ -462,6 +491,24 @@ private final class ScreenshotCanvasView: NSView {
         pushUndo()
         updateDocument(rendered(size: rect.size) { context in
             drawDocumentImage(in: context, origin: CGPoint(x: -rect.minX, y: -rect.minY))
+        })
+    }
+
+    private func commitBrush() {
+        let points = freehandPreviewPoints()
+        guard points.count >= 2 else {
+            return
+        }
+
+        pushUndo()
+        updateDocument(rendered(size: document.image.size) { context in
+            drawDocumentImage(in: context, origin: .zero)
+            context.setStrokeColor(lineColor.cgColor)
+            context.setLineWidth(lineWidth)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.addPath(freehandPath(points: points).cgPath)
+            context.strokePath()
         })
     }
 
@@ -483,6 +530,29 @@ private final class ScreenshotCanvasView: NSView {
             context.addPath(linePath(from: dragStart, to: dragCurrent, arrow: arrow).cgPath)
             context.strokePath()
         })
+    }
+
+    private func appendFreehandPoint(_ point: CGPoint) {
+        guard let last = freehandPoints.last else {
+            freehandPoints.append(point)
+            return
+        }
+
+        if hypot(point.x - last.x, point.y - last.y) >= 1 {
+            freehandPoints.append(point)
+        }
+    }
+
+    private func freehandPreviewPoints() -> [CGPoint] {
+        if freehandPoints.isEmpty, let dragStart {
+            return [dragStart]
+        }
+
+        if let dragCurrent, freehandPoints.last != dragCurrent {
+            return freehandPoints + [dragCurrent]
+        }
+
+        return freehandPoints
     }
 
     private func commitRectangle() {

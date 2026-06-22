@@ -12,6 +12,7 @@ struct EzshotCoreTests {
         try testCaptureDelayClampsNegativeValue()
         try testLanguageModeDefaultsToSystemAndPersists()
         try testAppearanceModeDefaultsToSystemAndPersists()
+        try testLaunchAtLoginDefaultsToDisabledAndPersists()
         try testDefaultFileNameUsesPNGTimestampFormat()
         try testCustomTabTitleOverridesScreenshotTitle()
         try testSaveWritesPNGAndClearsDirtyState()
@@ -94,6 +95,20 @@ struct EzshotCoreTests {
         try expect(
             PreferencesStore(defaults: defaults).appearanceMode == "dark",
             "appearance mode should persist"
+        )
+    }
+
+    private static func testLaunchAtLoginDefaultsToDisabledAndPersists() throws {
+        let defaults = makeDefaults()
+        let store = PreferencesStore(defaults: defaults)
+
+        try expect(store.launchAtLogin == false, "launch at login should default to disabled")
+
+        store.launchAtLogin = true
+
+        try expect(
+            PreferencesStore(defaults: defaults).launchAtLogin,
+            "launch at login should persist"
         )
     }
 
