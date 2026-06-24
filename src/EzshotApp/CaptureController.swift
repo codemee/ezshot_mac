@@ -307,7 +307,7 @@ final class CaptureController {
                 let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
                 includingCurrentProcess || ownerPID != currentPID,
                 let layer = info[kCGWindowLayer as String] as? Int,
-                layer == 0,
+                Self.isSelectableWindowLayer(layer),
                 let alpha = info[kCGWindowAlpha as String] as? Double,
                 alpha > 0,
                 let boundsDict = info[kCGWindowBounds as String] as? NSDictionary
@@ -323,6 +323,13 @@ final class CaptureController {
             let ownerName = info[kCGWindowOwnerName as String] as? String ?? "Window"
             return CapturableWindow(id: id, bounds: bounds, ownerName: ownerName)
         }
+    }
+
+    private static func isSelectableWindowLayer(_ layer: Int) -> Bool {
+        // Floating panels and HUD-style utility windows often sit above layer
+        // 0. Keep the range narrow enough to avoid the screen-level selection
+        // overlays and other system surfaces.
+        (0...20).contains(layer)
     }
 
     private func captureImage(in rect: CGRect) async throws -> NSImage {
